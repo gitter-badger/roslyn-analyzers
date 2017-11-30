@@ -108,7 +108,7 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
             public RemoveLocalAction(string title, Func<CancellationToken, Task<Document>> createChangedDocument)
                 : base(title, createChangedDocument) { }
 
-            public override string EquivalenceKey => null;
+            public override string EquivalenceKey => Title;
         }
 
         private sealed class RemoveLocalFixAllAction : CodeAction
