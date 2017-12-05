@@ -117,5 +117,11 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
             public MyCodeAction(string title, Func<CancellationToken, Task<Solution>> createChangedSolution, string equivalenceKey)
                 : base(title, createChangedSolution, equivalenceKey) { }
         }
+
+        private sealed class RemoveParameterAction : SolutionChangeAction
+        {
+            public RemoveParameterAction(string title, Func<CancellationToken, Task<Solution>> createChangedSolution, string equivalenceKey)
+                : base(title, createChangedSolution, equivalenceKey) { }
+        }
     }
 }
