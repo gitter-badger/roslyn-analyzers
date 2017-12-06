@@ -121,7 +121,9 @@ namespace Test.Utilities
                 newSolution = runner.ApplyFixesOneByOne(document.Project.Solution, additionalFiles, allowNewCompilerDiagnostics);
             }
 
-            VerifyDocuments(newSolution, new[] { document }, new[] { additionalFileText });
+            document = newSolution.GetDocument(document.Id);
+            var actualText = GetActualTextForNewDocument(document, additionalFileName);
+            Assert.Equal(additionalFileText, actualText.ToString());
         }
 
         private void VerifyDocuments(Solution solution, Document[] documents, string[] newSources)
@@ -132,7 +134,7 @@ namespace Test.Utilities
             for (int i = 0; i < documentIds.Length; i++)
             {
                 var document = solution.GetDocument(documentIds[i]);
-                var actualText = GetActualTextForNewDocument(document, newSourceFileNames[i]);
+                var actualText = GetSourceText(document);
                 Assert.Equal(newSources[i], actualText.ToString());
             }
         }
@@ -151,9 +153,14 @@ namespace Test.Utilities
                 }
             }
 
-            if (((newDocument as Document)?.SupportsSyntaxTree).GetValueOrDefault())
+            return GetSourceText(newDocument);
+        }
+
+        private static SourceText GetSourceText(TextDocument textDocument)
+        {
+            if (((textDocument as Document)?.SupportsSyntaxTree).GetValueOrDefault())
             {
-                var newSourceDocument = (Document)newDocument;
+                var newSourceDocument = (Document)textDocument;
                 newSourceDocument = Simplifier.ReduceAsync(newSourceDocument, Simplifier.Annotation).Result;
                 SyntaxNode root = newSourceDocument.GetSyntaxRootAsync().Result;
                 root = Formatter.Format(root, Formatter.Annotation, newSourceDocument.Project.Solution.Workspace);
@@ -161,7 +168,7 @@ namespace Test.Utilities
             }
             else
             {
-                return newDocument.GetTextAsync(CancellationToken.None).Result;
+                return textDocument.GetTextAsync(CancellationToken.None).Result;
             }
         }
     }
