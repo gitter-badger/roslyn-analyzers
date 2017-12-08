@@ -41,8 +41,6 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
             return Task.CompletedTask;
         }
 
-        protected abstract SyntaxNode GetOperationNode(SyntaxNode node);
-
         protected abstract SyntaxNode GetParameterNode(SyntaxNode node);
 
         private async Task<Solution> RemoveNodes(Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
@@ -64,17 +62,46 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
             return solution;
         }
 
+        private ImmutableArray<IArgumentOperation>? GetOperationArguments(SyntaxNode node, SemanticModel semanticModel, CancellationToken cancellationToken)
+        {
+            while (node != null)
+            {
+                // For calls like A.B.C(0), it gets nulls for operations for first iterations. 
+                var operation = semanticModel.GetOperation(node, cancellationToken);
+
+                var arguments = (operation as IObjectCreationOperation)?.Arguments ?? (operation as IInvocationOperation)?.Arguments;
+
+                if (arguments.HasValue)
+                {
+                    return arguments.Value;
+                }
+
+                node = node.Parent;
+            }
+
+            // Achieved the root and still could not find the node with parameters.
+            // Now need to cancel the action.
+            // TODO: throw a weak exception to get diagnostic of the situaiton.
+            return null;
+        }
+
         private async Task<ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>> GetNodesToRemoveAsync(Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
         {
             SyntaxNode root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
             SyntaxNode node = root.FindNode(diagnostic.Location.SourceSpan);
             node = GetParameterNode(node);
-            var nodesToRemove = ImmutableArray.CreateBuilder<KeyValuePair<DocumentId, SyntaxNode>>();
-            nodesToRemove.Add(new KeyValuePair<DocumentId, SyntaxNode>(document.Id, node));
 
             DocumentEditor editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
             ISymbol parameterSymbol = editor.SemanticModel.GetDeclaredSymbol(node);
             ISymbol methodDeclarationSymbol = editor.SemanticModel.GetDeclaredSymbol(node.Parent.Parent);
+            if (methodDeclarationSymbol is IPropertySymbol)
+            {
+                // Should not fix removing unused property indexer. Cancel the fix.
+                return ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>.Empty;
+            }
+
+            var nodesToRemove = ImmutableArray.CreateBuilder<KeyValuePair<DocumentId, SyntaxNode>>();
+            nodesToRemove.Add(new KeyValuePair<DocumentId, SyntaxNode>(document.Id, node));
             var referencedSymbols = await SymbolFinder.FindReferencesAsync(methodDeclarationSymbol, document.Project.Solution, cancellationToken).ConfigureAwait(false);
 
             foreach (var referencedSymbol in referencedSymbols)
@@ -84,16 +111,11 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
                     foreach (var referenceLocation in referencedSymbol.Locations)
                     {
                         Location location = referenceLocation.Location;
-                        var referencedSymbolNode = location.SourceTree.GetRoot().FindNode(location.SourceSpan).Parent;
-                        referencedSymbolNode = GetOperationNode(referencedSymbolNode);
+                        var referenceRoot = location.SourceTree.GetRoot();
+                        var referencedSymbolNode = referenceRoot.FindNode(location.SourceSpan);
                         DocumentEditor localEditor = await DocumentEditor.CreateAsync(referenceLocation.Document, cancellationToken).ConfigureAwait(false);
                         var operation = localEditor.SemanticModel.GetOperation(referencedSymbolNode, cancellationToken);
-
-                        var arguments = (operation as IObjectCreationOperation)?.Arguments;
-                        if (arguments == null)
-                        {
-                            arguments = (operation as IInvocationOperation)?.Arguments;
-                        }
+                        var arguments = GetOperationArguments(referencedSymbolNode, localEditor.SemanticModel, cancellationToken);
 
                         if (arguments != null)
                         {
@@ -101,9 +123,22 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
                             {
                                 if (argument.Parameter.Equals(parameterSymbol) && (argument.ArgumentKind == ArgumentKind.Explicit))
                                 {
-                                    nodesToRemove.Add(new KeyValuePair<DocumentId, SyntaxNode>(referenceLocation.Document.Id, referencedSymbolNode.FindNode(argument.Syntax.GetLocation().SourceSpan)));
+                                    if (argument.Value is ILiteralOperation || argument.Value is IParameterSymbol || argument.Value is IArrayCreationOperation || argument.Value is ILocalReferenceOperation)
+                                    {
+                                        nodesToRemove.Add(new KeyValuePair<DocumentId, SyntaxNode>(referenceLocation.Document.Id, referenceRoot.FindNode(argument.Syntax.GetLocation().SourceSpan)));
+                                    }
+                                    else
+                                    {
+                                        // Found a call that can have side effects. Cannot remove it. Cancel the whole fix.
+                                        return ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>.Empty;
+                                    }
                                 }
                             }
+                        }
+                        else
+                        {
+                            // Could not find proper arguments in the caller. It is safer to cancel the fix.
+                            return ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>.Empty;
                         }
                     }
                 }

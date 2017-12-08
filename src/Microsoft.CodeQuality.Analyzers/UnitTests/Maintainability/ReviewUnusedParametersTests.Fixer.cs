@@ -75,6 +75,8 @@ class C
     {
         var c = new C(0);
         UnusedParamMethod(0);
+        int b = 0;
+        UnusedParamMethod(b);
         UnusedParamStaticMethod(0);
         UnusedDefaultParamMethod(0);
         UnusedParamsArrayParamMethod(new int[0]);
@@ -124,6 +126,8 @@ class C
     public void Caller()
     {
         var c = new C();
+        UnusedParamMethod();
+        int b = 0;
         UnusedParamMethod();
         UnusedParamStaticMethod();
         UnusedDefaultParamMethod();
@@ -231,7 +235,7 @@ class C
     }
 }
 ";
-            VerifyCSharpFix(code, fix, allowNewCompilerDiagnostics: true, validationMode: TestValidationMode.AllowCompileErrors);
+            VerifyCSharpFix(code, fix);
         }
 
         [Fact]
@@ -265,7 +269,96 @@ class C
     }
 }
 ";
-            VerifyCSharpFix(code, fix, allowNewCompilerDiagnostics: true, validationMode: TestValidationMode.AllowCompileErrors);
+            VerifyCSharpFix(code, fix);
+        }
+
+        [Fact]
+        public void MultipleNamespaces_CSharp()
+        {
+            var code = @"
+namespace A.B.C.D
+{
+    public class Test
+    {
+        public Test(int param1) { }
+        
+        public static void UnusedParamMethod(int param1) { }
+    }
+}
+
+namespace E
+{
+    class CallerClass
+    {
+        public void Caller()
+        {
+            var test = new A.B.C.D.Test(0);
+            A.B.C.D.Test.UnusedParamMethod(0);
+        }
+    }
+}
+";
+            var fix = @"
+namespace A.B.C.D
+{
+    public class Test
+    {
+        public Test() { }
+        
+        public static void UnusedParamMethod() { }
+    }
+}
+
+namespace E
+{
+    class CallerClass
+    {
+        public void Caller()
+        {
+            var test = new A.B.C.D.Test();
+            A.B.C.D.Test.UnusedParamMethod();
+        }
+    }
+}
+";
+            VerifyCSharpFix(code, fix);
+        }
+
+        [Fact]
+        public void IndexerNoFix_CSharp()
+        {
+            var code = @"
+class C
+{
+    public int this[int i]
+    {
+        get { return 0; }
+        set { }
+    }
+}
+";
+
+            VerifyCSharpFix(code, code);
+        }
+
+        [Fact]
+        public void CalculationsInParameterNoFix_CSharp()
+        {
+            var code = @"
+class C
+{
+    void M(int x) { }
+    
+    int N(int x) => x;
+    
+    void Caller()
+    {
+        M(N(0));
+    }
+}
+";
+           
+            VerifyCSharpFix(code, code);
         }
 
         [Fact]
@@ -296,6 +389,19 @@ Class C
 
     Public Sub UnusedErrorTypeParamMethod(param1 As UndefinedType) ' error BC30002: Type 'UndefinedType' is not defined.
     End Sub
+
+    Public Sub Caller()
+        Dim c = New C(0)
+        UnusedParamMethod(0)
+        Dim b As Integer = 0
+        UnusedParamMethod(b)
+        UnusedParamStaticMethod(0)
+        UnusedDefaultParamMethod(0)
+        UnusedParamsArrayParamMethod(New Integer() {})
+        MultipleUnusedParamsMethod(0, 1)
+        Dim a As Integer = 0
+        UnusedRefParamMethod(a)
+    End Sub
 End Class
 ";
             var fix = @"
@@ -322,6 +428,19 @@ Class C
     End Sub
 
     Public Sub UnusedErrorTypeParamMethod() ' error BC30002: Type 'UndefinedType' is not defined.
+    End Sub
+
+    Public Sub Caller()
+        Dim c = New C()
+        UnusedParamMethod()
+        Dim b As Integer = 0
+        UnusedParamMethod()
+        UnusedParamStaticMethod()
+        UnusedDefaultParamMethod()
+        UnusedParamsArrayParamMethod()
+        MultipleUnusedParamsMethod()
+        Dim a As Integer = 0
+        UnusedRefParamMethod()
     End Sub
 End Class
 ";
@@ -398,7 +517,92 @@ Class C
     End Sub
 End Class
 ";
-            VerifyBasicFix(code, fix, allowNewCompilerDiagnostics: true, validationMode: TestValidationMode.AllowCompileErrors);
+            VerifyBasicFix(code, fix);
+        }
+
+        [Fact]
+        public void MultipleNamespaces_Basic()
+        {
+            var code = @"
+Namespace A.B.C.D
+    Public Class Test
+        Public Sub New(param1 As Integer)
+        End Sub
+
+        Public Shared Sub UnusedParamMethod(param1 As Integer)
+        End Sub
+    End Class
+End Namespace
+
+Namespace E
+    Class CallerClass
+        Public Sub Caller()
+            Dim test = New A.B.C.D.Test(0)
+            A.B.C.D.Test.UnusedParamMethod(0)
+        End Sub
+    End Class
+End Namespace
+";
+            var fix = @"
+Namespace A.B.C.D
+    Public Class Test
+        Public Sub New()
+        End Sub
+
+        Public Shared Sub UnusedParamMethod()
+        End Sub
+    End Class
+End Namespace
+
+Namespace E
+    Class CallerClass
+        Public Sub Caller()
+            Dim test = New A.B.C.D.Test()
+            A.B.C.D.Test.UnusedParamMethod()
+        End Sub
+    End Class
+End Namespace
+";
+            VerifyBasicFix(code, fix);
+        }
+
+        [Fact]
+        public void CalculationsInParameterNoFix_Basic()
+        {
+            var code = @"
+Class C
+    Sub M(x As Integer)
+    End Sub
+
+    Function N(x As Integer) As Integer
+        Return x
+    End Function
+
+    Sub Caller()
+        M(N(0))
+    End Sub
+End Class
+";
+            VerifyBasicFix(code, code);
+        }
+
+        [Fact]
+        public void IndexerNoFix_Basic()
+        {
+            var code = @"
+Class C
+    Public Property Item(i As Integer) As Integer
+        Get
+            Return 0
+        End Get
+
+        Set
+        End Set
+    End Property
+End Class
+";
+
+            VerifyBasicFix(code, code);
         }
     }
 }

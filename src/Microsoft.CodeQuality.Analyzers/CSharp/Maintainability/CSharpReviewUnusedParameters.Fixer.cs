@@ -3,7 +3,6 @@
 using System.Composition;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeQuality.Analyzers.Maintainability;
 
 namespace Microsoft.CodeQuality.CSharp.Analyzers.Maintainability
@@ -14,16 +13,6 @@ namespace Microsoft.CodeQuality.CSharp.Analyzers.Maintainability
     [ExportCodeFixProvider(LanguageNames.CSharp), Shared]
     public sealed class CSharpReviewUnusedParametersFixer : ReviewUnusedParametersFixer
     {
-        protected override SyntaxNode GetOperationNode(SyntaxNode node)
-        {
-            if (node.Kind() == SyntaxKind.SimpleMemberAccessExpression)
-            {
-                return node.Parent;
-            }
-
-            return node;
-        }
-
         protected override SyntaxNode GetParameterNode(SyntaxNode node)
         {
             return node;
