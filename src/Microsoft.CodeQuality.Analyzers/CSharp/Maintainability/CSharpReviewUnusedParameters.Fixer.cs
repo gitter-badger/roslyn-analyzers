@@ -3,6 +3,7 @@
 using System.Composition;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeQuality.Analyzers.Maintainability;
 
 namespace Microsoft.CodeQuality.CSharp.Analyzers.Maintainability
@@ -16,6 +17,12 @@ namespace Microsoft.CodeQuality.CSharp.Analyzers.Maintainability
         protected override SyntaxNode GetParameterNode(SyntaxNode node)
         {
             return node;
+        }
+
+        protected override bool CanContinuouslyLeadToObjectCreationOrInvocation(SyntaxNode node)
+        {
+            var kind = node.Kind();
+            return kind == SyntaxKind.QualifiedName || kind == SyntaxKind.IdentifierName || kind == SyntaxKind.SimpleMemberAccessExpression;
         }
     }
 }

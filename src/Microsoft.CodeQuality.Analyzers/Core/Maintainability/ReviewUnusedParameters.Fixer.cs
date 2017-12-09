@@ -43,6 +43,8 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
 
         protected abstract SyntaxNode GetParameterNode(SyntaxNode node);
 
+        protected abstract bool CanContinuouslyLeadToObjectCreationOrInvocation(SyntaxNode node);
+
         private async Task<Solution> RemoveNodes(Document document, Diagnostic diagnostic, CancellationToken cancellationToken)
         {
             var solution = document.Project.Solution;
@@ -66,6 +68,14 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
         {
             while (node != null)
             {
+                // All nodes in the path should continuously lead to IObjectCreationOperation or IInvocationOperation.
+                if (!CanContinuouslyLeadToObjectCreationOrInvocation(node))
+                {
+                    return null;
+                }
+
+                node = node.Parent;
+
                 // For calls like A.B.C(0), it gets nulls for operations for first iterations. 
                 var operation = semanticModel.GetOperation(node, cancellationToken);
 
@@ -75,13 +85,10 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
                 {
                     return arguments.Value;
                 }
-
-                node = node.Parent;
             }
 
             // Achieved the root and still could not find the node with parameters.
-            // Now need to cancel the action.
-            // TODO: throw a weak exception to get diagnostic of the situaiton.
+            // Need to cancel the action.
             return null;
         }
 
@@ -93,10 +100,11 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
 
             DocumentEditor editor = await DocumentEditor.CreateAsync(document, cancellationToken).ConfigureAwait(false);
             ISymbol parameterSymbol = editor.SemanticModel.GetDeclaredSymbol(node);
-            ISymbol methodDeclarationSymbol = editor.SemanticModel.GetDeclaredSymbol(node.Parent.Parent);
-            if (methodDeclarationSymbol is IPropertySymbol)
-            {
-                // Should not fix removing unused property indexer. Cancel the fix.
+            ISymbol methodDeclarationSymbol = parameterSymbol.ContainingSymbol;
+
+            if (!IsSafeMethodToRemoveParameter(methodDeclarationSymbol))
+            { 
+                // See also: https://github.com/dotnet/roslyn-analyzers/issues/1458
                 return ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>.Empty;
             }
 
@@ -123,13 +131,14 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
                             {
                                 if (argument.Parameter.Equals(parameterSymbol) && (argument.ArgumentKind == ArgumentKind.Explicit))
                                 {
-                                    if (argument.Value is ILiteralOperation || argument.Value is IParameterSymbol || argument.Value is IArrayCreationOperation || argument.Value is ILocalReferenceOperation)
+                                    if (IsSafeArgumentToRemove(argument))
                                     {
                                         nodesToRemove.Add(new KeyValuePair<DocumentId, SyntaxNode>(referenceLocation.Document.Id, referenceRoot.FindNode(argument.Syntax.GetLocation().SourceSpan)));
                                     }
                                     else
                                     {
                                         // Found a call that can have side effects. Cannot remove it. Cancel the whole fix.
+                                        // See also: https://github.com/dotnet/roslyn-analyzers/issues/1458
                                         return ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>.Empty;
                                     }
                                 }
@@ -138,6 +147,7 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
                         else
                         {
                             // Could not find proper arguments in the caller. It is safer to cancel the fix.
+                            // See also: https://github.com/dotnet/roslyn-analyzers/issues/1458
                             return ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>.Empty;
                         }
                     }
@@ -145,6 +155,47 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
             }
 
             return nodesToRemove.ToImmutable();
+        }
+
+        private static bool IsSafeMethodToRemoveParameter(ISymbol methodDeclarationSymbol)
+        {
+            switch(methodDeclarationSymbol.Kind)
+            {
+                // Should not fix removing unused property indexer.
+                case SymbolKind.Property:
+                    return false;
+                case SymbolKind.Method:
+                    var methodSymbol = methodDeclarationSymbol as IMethodSymbol;
+                    // Should not remove parameter for a conversion operator.
+                    return (methodSymbol.MethodKind != MethodKind.Conversion);
+                default:
+                    return true;
+            }
+        }
+
+        private static bool IsSafeArgumentToRemove(IArgumentOperation argument)
+        {
+            switch (argument.Value.Kind)
+            {
+                case OperationKind.ParameterReference:
+                case OperationKind.LocalReference:
+                    return true;
+                case OperationKind.Conversion:
+                    var conversionOperation = argument.Value as IConversionOperation;
+                    if (conversionOperation.IsImplicit && !conversionOperation.Conversion.IsUserDefined)
+                    {
+                        switch (conversionOperation.Operand.Kind)
+                        {
+                            case OperationKind.ParameterReference:
+                            case OperationKind.LocalReference:
+                                return true;
+                        }
+                    }
+
+                    return false;
+            }
+
+            return argument.Value.ConstantValue.HasValue;
         }
 
         private sealed class MyCodeAction : SolutionChangeAction

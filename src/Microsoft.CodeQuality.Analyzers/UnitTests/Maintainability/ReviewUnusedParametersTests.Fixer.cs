@@ -77,9 +77,9 @@ class C
         UnusedParamMethod(0);
         int b = 0;
         UnusedParamMethod(b);
-        UnusedParamStaticMethod(0);
+        UnusedParamStaticMethod(1 + 1);
         UnusedDefaultParamMethod(0);
-        UnusedParamsArrayParamMethod(new int[0]);
+        UnusedParamsArrayParamMethod(new int[0]); // Unsafe to fix.
         MultipleUnusedParamsMethod(0, 1);
         int a = 0;
         UnusedRefParamMethod(ref a);
@@ -107,7 +107,7 @@ class C
     {
     }
 
-    public void UnusedParamsArrayParamMethod()
+    public void UnusedParamsArrayParamMethod(params int[] paramsArr)
     {
     }
 
@@ -131,7 +131,7 @@ class C
         UnusedParamMethod();
         UnusedParamStaticMethod();
         UnusedDefaultParamMethod();
-        UnusedParamsArrayParamMethod();
+        UnusedParamsArrayParamMethod(new int[0]); // Unsafe to fix.
         MultipleUnusedParamsMethod();
         int a = 0;
         UnusedRefParamMethod();
@@ -362,6 +362,56 @@ class C
         }
 
         [Fact]
+        public void Conversion_CSharp()
+        {
+            var code = @"
+class C
+{
+    public static explicit operator int(C value) => 0;
+
+    public void M1(double d) { }
+
+    public void M2(int i) { }
+
+    public void M3(int x) { }
+
+    public void Caller()
+    {
+        int i = 0;
+        M1(i);
+        double d = 0;
+        M2((int)d);
+        var instance = new C();
+        M3((int)instance);
+    }
+}
+";
+            var fix = @"
+class C
+{
+    public static explicit operator int(C value) => 0;
+
+    public void M1() { }
+
+    public void M2(int i) { }
+
+    public void M3(int x) { }
+
+    public void Caller()
+    {
+        int i = 0;
+        M1();
+        double d = 0;
+        M2((int)d);
+        var instance = new C();
+        M3((int)instance);
+    }
+}
+";
+            VerifyCSharpFix(code, fix, allowNewCompilerDiagnostics: true);
+        }
+
+        [Fact]
         public void BaseScenario_Basic()
         {
             var code = @"
@@ -395,9 +445,9 @@ Class C
         UnusedParamMethod(0)
         Dim b As Integer = 0
         UnusedParamMethod(b)
-        UnusedParamStaticMethod(0)
+        UnusedParamStaticMethod(1 + 1)
         UnusedDefaultParamMethod(0)
-        UnusedParamsArrayParamMethod(New Integer() {})
+        UnusedParamsArrayParamMethod(New Integer() {}) ' Unsafe to fix
         MultipleUnusedParamsMethod(0, 1)
         Dim a As Integer = 0
         UnusedRefParamMethod(a)
@@ -418,7 +468,7 @@ Class C
     Public Sub UnusedDefaultParamMethod()
     End Sub
 
-    Public Sub UnusedParamsArrayParamMethod()
+    Public Sub UnusedParamsArrayParamMethod(ParamArray paramsArr As Integer())
     End Sub
 
     Public Sub MultipleUnusedParamsMethod()
@@ -437,7 +487,7 @@ Class C
         UnusedParamMethod()
         UnusedParamStaticMethod()
         UnusedDefaultParamMethod()
-        UnusedParamsArrayParamMethod()
+        UnusedParamsArrayParamMethod(New Integer() {}) ' Unsafe to fix
         MultipleUnusedParamsMethod()
         Dim a As Integer = 0
         UnusedRefParamMethod()
@@ -603,6 +653,63 @@ End Class
 ";
 
             VerifyBasicFix(code, code);
+        }
+
+
+        [Fact]
+        public void Conversion_Basic()
+        {
+            var code = @"
+Class C
+    Public Shared Narrowing Operator CType(value As C) As Integer
+        Return 0
+    End Operator
+
+    Public Sub M1(d As Double)
+    End Sub
+
+    Public Sub M2(i As Integer)
+    End Sub
+
+    Public Sub M3(x As Integer)
+    End Sub
+
+    Public Sub Caller()
+        Dim i As Integer = 0
+        M1(i)
+        Dim d As Double = 0
+        M2(CInt(d))
+        Dim instance = New C()
+        M3(CType(instance, Integer))
+    End Sub
+End Class
+";
+            var fix = @"
+Class C
+    Public Shared Narrowing Operator CType(value As C) As Integer
+        Return 0
+    End Operator
+
+    Public Sub M1()
+    End Sub
+
+    Public Sub M2(i As Integer)
+    End Sub
+
+    Public Sub M3(x As Integer)
+    End Sub
+
+    Public Sub Caller()
+        Dim i As Integer = 0
+        M1()
+        Dim d As Double = 0
+        M2(CInt(d))
+        Dim instance = New C()
+        M3(CType(instance, Integer))
+    End Sub
+End Class
+";
+            VerifyBasicFix(code, fix, allowNewCompilerDiagnostics: true);
         }
     }
 }

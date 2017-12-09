@@ -110,6 +110,12 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
                         return;
                     }
 
+                    // Ignore property accessors.
+                    if (method.IsPropertyAccessor())
+                    {
+                        return;
+                    }
+
                     // Ignore event handler methods "Handler(object, MyEventArgs)"
                     if (eventsArgSymbol != null &&
                         method.Parameters.Length == 2 &&
