@@ -41,7 +41,7 @@ namespace Microsoft.CodeQuality.Analyzers.ApiDesignGuidelines
                                                                           helpLinkUri: "https://msdn.microsoft.com/library/ms182153.aspx",
                                                                           customTags: WellKnownDiagnosticTags.Telemetry);
 
-        public sealed override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
+        public sealed override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => DiagnosticHelpers.EnabledByDefaultIfNotBuildingVSIX ? ImmutableArray.Create(Rule) : ImmutableArray<DiagnosticDescriptor>.Empty;
 
         public sealed override void Initialize(AnalysisContext analysisContext)
         {
@@ -109,7 +109,7 @@ namespace Microsoft.CodeQuality.Analyzers.ApiDesignGuidelines
             if (method.ExplicitInterfaceImplementations.Length == 0 ||
                 method.GetResultantVisibility() != SymbolVisibility.Private ||
                 method.ContainingType.IsSealed ||
-                method.ContainingType.GetResultantVisibility() != SymbolVisibility.Public)
+                !method.ContainingType.IsExternallyVisible())
             {
                 return;
             }
@@ -130,7 +130,7 @@ namespace Microsoft.CodeQuality.Analyzers.ApiDesignGuidelines
                 }
 
                 hasPublicInterfaceImplementation = hasPublicInterfaceImplementation ||
-                    interfaceMethod.ContainingType.GetResultantVisibility() == SymbolVisibility.Public;
+                    interfaceMethod.ContainingType.IsExternallyVisible();
             }
 
             // Even if none of the interface methods have alternates, there's only an issue if at least one of the interfaces is public.
@@ -146,7 +146,7 @@ namespace Microsoft.CodeQuality.Analyzers.ApiDesignGuidelines
             {
                 foreach (IMethodSymbol method in type.GetMembers(interfaceMethod.Name).OfType<IMethodSymbol>())
                 {
-                    if (method.GetResultantVisibility() == SymbolVisibility.Public)
+                    if (method.IsExternallyVisible())
                     {
                         return true;
                     }
@@ -158,7 +158,7 @@ namespace Microsoft.CodeQuality.Analyzers.ApiDesignGuidelines
                 interfaceMethod.ContainingType.Equals(iDisposableTypeSymbol) &&
                 namedType.GetBaseTypesAndThis().Any(t =>
                     t.GetMembers("Close").OfType<IMethodSymbol>().Any(m =>
-                        m.GetResultantVisibility() == SymbolVisibility.Public));
+                        m.IsExternallyVisible()));
         }
 
         private static void ReportDiagnostic(OperationBlockAnalysisContext context, params object[] messageArgs)

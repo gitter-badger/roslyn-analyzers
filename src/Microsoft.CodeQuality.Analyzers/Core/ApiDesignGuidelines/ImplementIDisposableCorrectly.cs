@@ -118,7 +118,9 @@ namespace Microsoft.CodeQuality.Analyzers.ApiDesignGuidelines
                                                                              helpLinkUri: HelpLinkUri,
                                                                              customTags: WellKnownDiagnosticTags.Telemetry);
 
-        public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(IDisposableReimplementationRule, FinalizeOverrideRule, DisposeOverrideRule, DisposeSignatureRule, RenameDisposeRule, DisposeBoolSignatureRule, DisposeImplementationRule, FinalizeImplementationRule, ProvideDisposeBoolRule);
+        public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => DiagnosticHelpers.EnabledByDefaultIfNotBuildingVSIX ?
+            ImmutableArray.Create(IDisposableReimplementationRule, FinalizeOverrideRule, DisposeOverrideRule, DisposeSignatureRule, RenameDisposeRule, DisposeBoolSignatureRule, DisposeImplementationRule, FinalizeImplementationRule, ProvideDisposeBoolRule) :
+            ImmutableArray<DiagnosticDescriptor>.Empty;
 
         public override void Initialize(AnalysisContext analysisContext)
         {
@@ -196,7 +198,9 @@ namespace Microsoft.CodeQuality.Analyzers.ApiDesignGuidelines
 
             private void AnalyzeNamedTypeSymbol(SymbolAnalysisContext context)
             {
-                if (context.Symbol is INamedTypeSymbol type && type.TypeKind == TypeKind.Class)
+                if (context.Symbol is INamedTypeSymbol type &&
+                    type.TypeKind == TypeKind.Class &&
+                    type.IsExternallyVisible())
                 {
                     bool implementsDisposableInBaseType = ImplementsDisposableInBaseType(type);
 
@@ -552,7 +556,8 @@ namespace Microsoft.CodeQuality.Analyzers.ApiDesignGuidelines
                         var expressionStatement = (IExpressionStatementOperation)operation;
                         return ValidateExpression(expressionStatement);
                     default:
-                        return false;
+                        // Ignore operation roots with no IOperation API support (OperationKind.None) 
+                        return operation.IsOperationNoneRoot();
                 }
             }
 
@@ -683,7 +688,8 @@ namespace Microsoft.CodeQuality.Analyzers.ApiDesignGuidelines
                     case OperationKind.Try:
                         return ValidateTryOperation((ITryOperation)operation);
                     default:
-                        return false;
+                        // Ignore operation roots with no IOperation API support (OperationKind.None) 
+                        return operation.IsOperationNoneRoot();
                 }
             }
 
