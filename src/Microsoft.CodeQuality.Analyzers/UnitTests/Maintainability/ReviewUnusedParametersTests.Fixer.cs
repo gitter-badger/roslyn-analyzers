@@ -39,6 +39,10 @@ using System;
 
 class C
 {
+    public int Property1 { get; set; }
+
+    public int Field1;
+
     public C(int param)
     {
     }
@@ -74,12 +78,12 @@ class C
     public void Caller()
     {
         var c = new C(0);
-        UnusedParamMethod(0);
+        UnusedParamMethod(this.Property1);
         int b = 0;
         UnusedParamMethod(b);
         UnusedParamStaticMethod(1 + 1);
-        UnusedDefaultParamMethod(0);
-        UnusedParamsArrayParamMethod(new int[0]); // Unsafe to fix.
+        UnusedDefaultParamMethod(this.Field1);
+        UnusedParamsArrayParamMethod(new int[0]);
         MultipleUnusedParamsMethod(0, 1);
         int a = 0;
         UnusedRefParamMethod(ref a);
@@ -91,6 +95,10 @@ using System;
 
 class C
 {
+    public int Property1 { get; set; }
+
+    public int Field1;
+
     public C()
     {
     }
@@ -107,7 +115,7 @@ class C
     {
     }
 
-    public void UnusedParamsArrayParamMethod(params int[] paramsArr)
+    public void UnusedParamsArrayParamMethod()
     {
     }
 
@@ -131,7 +139,7 @@ class C
         UnusedParamMethod();
         UnusedParamStaticMethod();
         UnusedDefaultParamMethod();
-        UnusedParamsArrayParamMethod(new int[0]); // Unsafe to fix.
+        UnusedParamsArrayParamMethod();
         MultipleUnusedParamsMethod();
         int a = 0;
         UnusedRefParamMethod();
@@ -342,18 +350,35 @@ class C
         }
 
         [Fact]
-        public void CalculationsInParameterNoFix_CSharp()
+        public void PropertyNoFix_CSharp()
         {
             var code = @"
 class C
 {
-    void M(int x) { }
+    public int Property
+    {
+        get { return 0; }
+        set { }
+    }
+}
+";
+
+            VerifyCSharpFix(code, code);
+        }
+
+        [Fact]
+        public void CalculationsInParameter_CSharp()
+        {
+            var code = @"
+class C
+{
+    void M() { }
     
     int N(int x) => x;
     
     void Caller()
     {
-        M(N(0));
+        M();
     }
 }
 ";
@@ -393,18 +418,18 @@ class C
 
     public void M1() { }
 
-    public void M2(int i) { }
+    public void M2() { }
 
-    public void M3(int x) { }
+    public void M3() { }
 
     public void Caller()
     {
         int i = 0;
         M1();
         double d = 0;
-        M2((int)d);
+        M2();
         var instance = new C();
-        M3((int)instance);
+        M3();
     }
 }
 ";
@@ -416,6 +441,10 @@ class C
         {
             var code = @"
 Class C
+    Public Property Property1 As Integer
+
+    Public Field1 As Integer
+
     Public Sub New(param As Integer)
     End Sub
 
@@ -442,12 +471,12 @@ Class C
 
     Public Sub Caller()
         Dim c = New C(0)
-        UnusedParamMethod(0)
+        UnusedParamMethod(Property1)
         Dim b As Integer = 0
         UnusedParamMethod(b)
         UnusedParamStaticMethod(1 + 1)
-        UnusedDefaultParamMethod(0)
-        UnusedParamsArrayParamMethod(New Integer() {}) ' Unsafe to fix
+        UnusedDefaultParamMethod(Field1)
+        UnusedParamsArrayParamMethod(New Integer() {})
         MultipleUnusedParamsMethod(0, 1)
         Dim a As Integer = 0
         UnusedRefParamMethod(a)
@@ -456,6 +485,10 @@ End Class
 ";
             var fix = @"
 Class C
+    Public Property Property1 As Integer
+
+    Public Field1 As Integer
+
     Public Sub New()
     End Sub
 
@@ -468,7 +501,7 @@ Class C
     Public Sub UnusedDefaultParamMethod()
     End Sub
 
-    Public Sub UnusedParamsArrayParamMethod(ParamArray paramsArr As Integer())
+    Public Sub UnusedParamsArrayParamMethod()
     End Sub
 
     Public Sub MultipleUnusedParamsMethod()
@@ -487,7 +520,7 @@ Class C
         UnusedParamMethod()
         UnusedParamStaticMethod()
         UnusedDefaultParamMethod()
-        UnusedParamsArrayParamMethod(New Integer() {}) ' Unsafe to fix
+        UnusedParamsArrayParamMethod()
         MultipleUnusedParamsMethod()
         Dim a As Integer = 0
         UnusedRefParamMethod()
@@ -617,7 +650,7 @@ End Namespace
         }
 
         [Fact]
-        public void CalculationsInParameterNoFix_Basic()
+        public void CalculationsInParameter_Basic()
         {
             var code = @"
 Class C
@@ -633,7 +666,22 @@ Class C
     End Sub
 End Class
 ";
-            VerifyBasicFix(code, code);
+
+            var fix = @"
+Class C
+    Sub M()
+    End Sub
+
+    Function N(x As Integer) As Integer
+        Return x
+    End Function
+
+    Sub Caller()
+        M()
+    End Sub
+End Class
+";
+            VerifyBasicFix(code, fix);
         }
 
         [Fact]
@@ -655,6 +703,24 @@ End Class
             VerifyBasicFix(code, code);
         }
 
+        [Fact]
+        public void PropertyNoFix_Basic()
+        {
+            var code = @"
+Class C
+    Public Property Property1 As Integer
+        Get
+            Return 0
+        End Get
+
+        Set
+        End Set
+    End Property
+End Class
+";
+
+            VerifyBasicFix(code, code);
+        }
 
         [Fact]
         public void Conversion_Basic()
@@ -693,19 +759,19 @@ Class C
     Public Sub M1()
     End Sub
 
-    Public Sub M2(i As Integer)
+    Public Sub M2()
     End Sub
 
-    Public Sub M3(x As Integer)
+    Public Sub M3()
     End Sub
 
     Public Sub Caller()
         Dim i As Integer = 0
         M1()
         Dim d As Double = 0
-        M2(CInt(d))
+        M2()
         Dim instance = New C()
-        M3(CType(instance, Integer))
+        M3()
     End Sub
 End Class
 ";

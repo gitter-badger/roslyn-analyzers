@@ -103,8 +103,8 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
             ISymbol methodDeclarationSymbol = parameterSymbol.ContainingSymbol;
 
             if (!IsSafeMethodToRemoveParameter(methodDeclarationSymbol))
-            { 
-                // See also: https://github.com/dotnet/roslyn-analyzers/issues/1458
+            {
+                // See https://github.com/dotnet/roslyn-analyzers/issues/1466
                 return ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>.Empty;
             }
 
@@ -129,26 +129,11 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
                         {
                             foreach (IArgumentOperation argument in arguments)
                             {
-                                if (argument.Parameter.Equals(parameterSymbol) && (argument.ArgumentKind == ArgumentKind.Explicit))
+                                if (argument.Parameter.Equals(parameterSymbol) && argument.ArgumentKind == ArgumentKind.Explicit)
                                 {
-                                    if (IsSafeArgumentToRemove(argument))
-                                    {
-                                        nodesToRemove.Add(new KeyValuePair<DocumentId, SyntaxNode>(referenceLocation.Document.Id, referenceRoot.FindNode(argument.Syntax.GetLocation().SourceSpan)));
-                                    }
-                                    else
-                                    {
-                                        // Found a call that can have side effects. Cannot remove it. Cancel the whole fix.
-                                        // See also: https://github.com/dotnet/roslyn-analyzers/issues/1458
-                                        return ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>.Empty;
-                                    }
+                                    nodesToRemove.Add(new KeyValuePair<DocumentId, SyntaxNode>(referenceLocation.Document.Id, referenceRoot.FindNode(argument.Syntax.GetLocation().SourceSpan)));
                                 }
                             }
-                        }
-                        else
-                        {
-                            // Could not find proper arguments in the caller. It is safer to cancel the fix.
-                            // See also: https://github.com/dotnet/roslyn-analyzers/issues/1458
-                            return ImmutableArray<KeyValuePair<DocumentId, SyntaxNode>>.Empty;
                         }
                     }
                 }
@@ -159,7 +144,7 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
 
         private static bool IsSafeMethodToRemoveParameter(ISymbol methodDeclarationSymbol)
         {
-            switch(methodDeclarationSymbol.Kind)
+            switch (methodDeclarationSymbol.Kind)
             {
                 // Should not fix removing unused property indexer.
                 case SymbolKind.Property:
@@ -171,31 +156,6 @@ namespace Microsoft.CodeQuality.Analyzers.Maintainability
                 default:
                     return true;
             }
-        }
-
-        private static bool IsSafeArgumentToRemove(IArgumentOperation argument)
-        {
-            switch (argument.Value.Kind)
-            {
-                case OperationKind.ParameterReference:
-                case OperationKind.LocalReference:
-                    return true;
-                case OperationKind.Conversion:
-                    var conversionOperation = argument.Value as IConversionOperation;
-                    if (conversionOperation.IsImplicit && !conversionOperation.Conversion.IsUserDefined)
-                    {
-                        switch (conversionOperation.Operand.Kind)
-                        {
-                            case OperationKind.ParameterReference:
-                            case OperationKind.LocalReference:
-                                return true;
-                        }
-                    }
-
-                    return false;
-            }
-
-            return argument.Value.ConstantValue.HasValue;
         }
 
         private sealed class MyCodeAction : SolutionChangeAction
